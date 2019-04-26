@@ -26,7 +26,7 @@ description = ("Thrift SASL Python module that implements SASL transports for "
 
 setup(
     name='thrift_sasl',
-    version='0.3.0',
+    version='0.4.0',
     description=description,
     long_description=description,
     author='Uri Laserson',
