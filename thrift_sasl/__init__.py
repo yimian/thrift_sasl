@@ -35,6 +35,21 @@ else:
     from cStringIO import StringIO as BufferIO
 
 
+def readall(read_fn, sz):
+    buff = b''
+    have = 0
+    while have < sz:
+        chunk = read_fn(sz - have)
+        have += len(chunk)
+        buff += chunk
+
+        if len(chunk) == 0:
+            raise TTransportException(TTransportException.END_OF_FILE,
+                                      "End of file reading from transport")
+
+    return buff
+
+
 class TSaslClientTransport(TTransportBase, CReadableTransport):
   START = 1
   OK = 2
@@ -107,10 +122,10 @@ class TSaslClientTransport(TTransportBase, CReadableTransport):
     self._trans.flush()
 
   def _recv_sasl_message(self):
-    header = self._trans.readAll(5)
+    header = self._trans_readall(5)
     status, length = struct.unpack(">BI", header)
     if length > 0:
-      payload = self._trans.readAll(length)
+      payload = self._trans_readall(length)
     else:
       payload = ""
     return status, payload
@@ -172,21 +187,27 @@ class TSaslClientTransport(TTransportBase, CReadableTransport):
     return ret + self.__rbuf.read(sz - len(ret))
 
   def _read_frame(self):
-    header = self._trans.readAll(4)
+    header = self._trans_readall(4)
     (length,) = struct.unpack(">I", header)
     if self.encode:
       # If the frames are encoded (i.e. you're using a QOP of auth-int or
       # auth-conf), then make sure to include the header in the bytes you send to
       # sasl.decode()
-      encoded = header + self._trans.readAll(length)
+      encoded = header + self._trans_readall(length)
       success, decoded = self.sasl.decode(encoded)
       if not success:
         raise TTransportException(type=TTransportException.UNKNOWN,
                                   message=self.sasl.getError())
     else:
       # If the frames are not encoded, just pass it through
-      decoded = self._trans.readAll(length)
+      decoded = self._trans_readall(length)
     self.__rbuf = BufferIO(decoded)
+
+  def _trans_readall(self, sz):
+    try:
+      return self._trans.readAll(sz)  # Thrift
+    except AttributeError:
+      return readall(self._trans.read, sz)  # thriftpy or thriftpy2
 
   def close(self):
     self._trans.close()
